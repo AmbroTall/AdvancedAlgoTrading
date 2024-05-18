@@ -4,24 +4,27 @@ from qstrader import settings
 from qstrader.compat import queue
 from qstrader.price_parser import PriceParser
 from qstrader.price_handler.iq_feed_intraday_csv_bar import IQFeedIntradayCsvBarPriceHandler
-from qstrader.strategy import Strategies, DisplayStrategy
+# from qstrader.strategy import
 from qstrader.position_sizer.naive import NaivePositionSizer
 from qstrader.risk_manager.example import ExampleRiskManager
 from qstrader.portfolio_handler import PortfolioHandler
 from qstrader.compliance.example import ExampleCompliance
 from qstrader.execution_handler.ib_simulated import IBSimulatedExecutionHandler
 from qstrader.statistics.tearsheet import TearsheetStatistics
-from qstrader.trading_session.backtest import Backtest
+from qstrader.trading_session import TradingSession
 from intraday_ml_strategy import IntradayMachineLearningPredictionStrategy
 
 
 def run(config, testing, tickers, filename):
     # Set up variables needed for backtest
     events_queue = queue.Queue()
-    csv_dir = "/path/to/your/data/"
+    csv_dir = "data"
+
     initial_equity = PriceParser.parse(500000.00)
+
     # Use DTN IQFeed Intraday Bar Price Handler
     start_date = datetime.datetime(2013, 1, 1)
+
     price_handler = IQFeedIntradayCsvBarPriceHandler(
         csv_dir, events_queue, tickers, start_date=start_date
     )
@@ -30,7 +33,7 @@ def run(config, testing, tickers, filename):
     strategy = IntradayMachineLearningPredictionStrategy(
         tickers, events_queue, model_pickle_file, lags=5
     )
-    strategy = Strategies(strategy, DisplayStrategy())
+    # strategy = Strategies(strategy, DisplayStrategy())
     # Use the Naive Position Sizer
     # (suggested quantities are followed)
     position_sizer = NaivePositionSizer()
@@ -54,7 +57,7 @@ def run(config, testing, tickers, filename):
         periods=int(252 * 6.5 * 60)  # Minutely periods
     )
     # Set up the backtest
-    backtest = Backtest(
+    backtest = TradingSession(
         price_handler, strategy,
         portfolio_handler, execution_handler,
         position_sizer, risk_manager,
@@ -78,7 +81,7 @@ def run(config, testing, tickers, filename):
 )
 @click.option(
     '--tickers',
-    default='SP500TR',
+    default='AGG',
     help='Tickers(usecomma)'
 )
 @click.option(

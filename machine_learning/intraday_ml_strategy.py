@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
-from sklearn.externals import joblib
+import joblib
 from qstrader.price_parser import PriceParser
 from qstrader.event import (SignalEvent, EventType)
-# from qstrader.strategy.base import AbstractStrategy
+from qstrader.strategy.base import AbstractStrategy
 
 
-class IntradayMachineLearningPredictionStrategy():
+class IntradayMachineLearningPredictionStrategy(AbstractStrategy):
     """
     Requires:
     tickers - The list of ticker symbols

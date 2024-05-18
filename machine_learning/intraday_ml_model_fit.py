@@ -6,7 +6,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import (
     BaggingClassifier, RandomForestClassifier, GradientBoostingClassifier
 )
-from sklearn.externals import joblib
+import joblib
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
@@ -34,16 +34,27 @@ def create_up_down_dataframe(
     vectors and one column for whether the stock adheres to the "up/down"
     rule, which is 1 if True or 0 if False for each minute.
     """
+
     ts = pd.read_csv(
         csv_filepath,
         names=[
-            "Timestamp", "Open", "Low", "High",
-            "Close", "Volume", "OpenInterest"
+            "Date", "Open", "High", "Low",
+            "Close", "Adj Close", "Volume"
         ],
-        index_col="Timestamp", parse_dates=True
+        header=0,  # Assuming the first row in your CSV is the header row
+        index_col="Date",  # Use 'Date' column as the index
+        parse_dates=True,  # Parse the index as datetime objects
+        date_format='%Y-%m-%d'  # Specify the date format if necessary
     )
+    # print("Columns", ts.Date)
+    print("Columns", ts.index)
+    ts.index = pd.to_datetime(ts.index)
+
     # Filter on start/end dates
     if start is not None:
+        print("start", type(start))
+        print("start", type(ts.index[3]))
+        print("start", ts.index[3])
         ts = ts[ts.index >= start]
     if end is not None:
         ts = ts[ts.index <= end]
@@ -51,7 +62,7 @@ def create_up_down_dataframe(
     ts.drop(
         [
             "Open", "Low", "High",
-            "Volume", "OpenInterest"
+            "Volume", "Adj Close"
         ],
         axis=1, inplace=True
     )
@@ -99,7 +110,7 @@ def create_up_down_dataframe(
         ts["UpDown"] = np.sign(ts["Lookforward1"])
         # Convert True/False into 1 and 0
         ts["UpDown"] = ts["UpDown"].astype(int)
-        ts["UpDown"].replace(to_replace=0, value=-1, inplace=True)
+        ts.replace({'UpDown': {0: -1}}, inplace=True)
         return ts
 
 
@@ -107,12 +118,12 @@ if __name__ == "__main__":
     random_state = 42
     n_estimators = 400
     n_jobs = 1
-    csv_filepath = "/path/to/your/AREX.csv"
+    csv_filepath = "../TestingGPTMachineLearning/data/SPY.csv"
     lookback_minutes = 30
     lookforward_minutes = 5
     print("Importing and creating CSV DataFrame...")
-    start_date = datetime.datetime(2007, 11, 8)
-    end_date = datetime.datetime(2012, 12, 31)
+    start_date = datetime.datetime(2015, 1, 1)
+    end_date = datetime.datetime(2024, 1, 1)
     ts = create_up_down_dataframe(
         csv_filepath,
         lookback_minutes=lookback_minutes,
