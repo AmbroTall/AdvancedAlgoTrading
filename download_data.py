@@ -20,4 +20,4 @@ def download_data(ticker, start_date, end_date, filename):
 
 if __name__ == "__main__":
     # Example usage
-    download_data('SPY', '2000-01-01', '2020-05-15', 'TestingGPTMachineLearning/data/SPY.csv')
+    download_data('AAPL', '2000-01-01', '2020-05-15', 'TestingGPTMachineLearning/data/SPY.csv')
