@@ -6,9 +6,12 @@ click==8.1.7
 contourpy==1.2.1
 cycler==0.12.1
 enum34==1.1.10
+eventkit==1.0.3
 fonttools==4.51.0
 frozendict==2.4.4
+fxcmpy==0.0.0.1
 html5lib==1.1
+ib-insync==0.9.86
 idna==3.7
 joblib==1.4.2
 kiwisolver==1.4.5
@@ -17,7 +20,9 @@ matplotlib==3.8.4
 multipledispatch==1.0.0
 multitasking==0.0.11
 munch==4.0.0
+nest-asyncio==1.6.0
 numpy==1.26.4
+oandapyV20==0.7.2
 packaging==24.0
 pandas==2.2.2
 peewee==3.17.5
