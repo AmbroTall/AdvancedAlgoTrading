@@ -74,6 +74,7 @@ def create_up_down_dataframe(
     ts.dropna(inplace=True)
     # Adjust all of these values to be percentage returns
     ts["Lookback0"] = ts["Close"].pct_change() * 100.0
+    print(ts.head())
     for i in range(0, lookback_minutes):
         ts["Lookback%s" % str(i + 1)] = ts[
                                             "Lookback%s" % str(i + 1)
@@ -98,6 +99,8 @@ def create_up_down_dataframe(
         ts["Lookforward%s" % str(i + 1)] > up
         for i in range(0, lookforward_minutes)
     ]
+    print("\n",ts.tail(),"\n")
+
     # Carry out the bitwise and, as well as bitwise or
     # for the down and up logic
     down_tot = down_cols[0]
