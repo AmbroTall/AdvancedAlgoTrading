@@ -172,10 +172,12 @@ def kelly_criterion(win_prob, win_loss_ratio):
 def place_order(contract, action, quantity, stop_loss_price, take_profit_price):
     order = MarketOrder(action, quantity)
     trade = ib.placeOrder(contract, order)
-    stop_order = StopOrder('SELL' if action == 'BUY' else 'BUY', quantity, stop_loss_price)
-    take_profit_order = LimitOrder('SELL' if action == 'BUY' else 'BUY', quantity, take_profit_price)
-    ib.placeOrder(contract, stop_order)
-    ib.placeOrder(contract, take_profit_order)
+    ib.sleep(1)  # Wait for the order to be processed
+    if trade.orderStatus.status == 'Filled':
+        stop_order = StopOrder('SELL' if action == 'BUY' else 'BUY', quantity, stop_loss_price)
+        take_profit_order = LimitOrder('SELL' if action == 'BUY' else 'BUY', quantity, take_profit_price)
+        ib.placeOrder(contract, stop_order)
+        ib.placeOrder(contract, take_profit_order)
     return trade
 
 # Function to log trades
@@ -275,11 +277,11 @@ def main():
 
             # Calculate stop loss and take profit prices
             if prediction == 1:  # Buy signal
-                stop_loss_price = entry_price - (entry_price * (1 / win_loss_ratio))
-                take_profit_price = entry_price + (entry_price * win_loss_ratio)
+                stop_loss_price = entry_price * (1 - (1 / win_loss_ratio))
+                take_profit_price = entry_price * (1 + win_loss_ratio)
             elif prediction == -1:  # Sell signal
-                stop_loss_price = entry_price + (entry_price * (1 / win_loss_ratio))
-                take_profit_price = entry_price - (entry_price * win_loss_ratio)
+                stop_loss_price = entry_price * (1 + (1 / win_loss_ratio))
+                take_profit_price = entry_price * (1 - win_loss_ratio)
 
             # Check if there are enough funds to place the trade
             if current_balance < trade_amount:
@@ -291,12 +293,14 @@ def main():
             if not any(pos.contract.symbol == contract.symbol for pos in positions):
                 if prediction == 1:  # Buy signal
                     trade = place_order(contract, 'BUY', trade_amount, stop_loss_price, take_profit_price)
-                    current_balance -= trade_amount
-                    log_trade(trade_log, datetime.now(), contract, 'BUY', trade_amount, entry_price, stop_loss_price, take_profit_price, current_balance)
+                    if trade.orderStatus.status == 'Filled':
+                        current_balance -= trade_amount
+                        log_trade(trade_log, datetime.now(), contract, 'BUY', trade_amount, entry_price, stop_loss_price, take_profit_price, current_balance)
                 elif prediction == -1:  # Sell signal
                     trade = place_order(contract, 'SELL', trade_amount, stop_loss_price, take_profit_price)
-                    current_balance += trade_amount
-                    log_trade(trade_log, datetime.now(), contract, 'SELL', trade_amount, entry_price, stop_loss_price, take_profit_price, current_balance)
+                    if trade.orderStatus.status == 'Filled':
+                        current_balance += trade_amount
+                        log_trade(trade_log, datetime.now(), contract, 'SELL', trade_amount, entry_price, stop_loss_price, take_profit_price, current_balance)
 
 # Initialize trade log
 trade_log = []
