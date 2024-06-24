@@ -8,7 +8,8 @@ import os
 import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, accuracy_score
+import matplotlib.pyplot as plt
 
 # Parameters
 lookback_minutes = 30
@@ -26,7 +27,7 @@ market_close = timezone.localize(datetime.strptime("23:59", "%H:%M"))
 
 # Connect to IB TWS
 ib = IB()
-ib.connect('127.0.0.1', 7497, clientId=2)
+ib.connect('127.0.0.1', 7497, clientId=1)
 
 # Define the forex contracts
 forex_pairs = [
@@ -62,34 +63,31 @@ def fetch_historical_data_with_retry(contract, end_datetime='', duration_str='1 
 # Function to fetch historical data for missing dates
 def fetch_missing_data(contract, last_date):
     end_datetime = ''
-    duration_str = '5 D'
+    duration_str = '1 M'
     bar_size = '5 mins'
     dfs = []
 
     while True:
         df = fetch_historical_data_with_retry(contract, end_datetime, duration_str, bar_size)
         if df is not None:
+            df['date'] = pd.to_datetime(df['date'])
+            last_date = pd.to_datetime(last_date)
             df = df[df['date'] > last_date]
             if df.empty:
                 break
             df['symbol'] = contract.symbol
             dfs.append(df)
-            end_datetime = df.index[0].strftime('%Y%m%d %H:%M:%S')
+            end_datetime = df['date'].max().strftime('%Y%m%d %H:%M:%S')
             time.sleep(1)  # To respect rate limits
         else:
             break
 
     if dfs:
-        return pd.concat(dfs)
+        combined_df = pd.concat(dfs)
+        combined_df.set_index('date', inplace=True)
+        return combined_df
     else:
         return None
-
-# Function to fetch and prepare historical data
-def fetch_and_prepare_data(contract):
-    end_datetime = ''
-    duration_str = '1 Y'
-    bar_size = '5 mins'
-    return fetch_historical_data_with_retry(contract, end_datetime, duration_str, bar_size)
 
 # Function to save data to CSV
 def save_data(df, filename):
@@ -171,17 +169,19 @@ def kelly_criterion(win_prob, win_loss_ratio):
     return win_prob - ((1 - win_prob) / win_loss_ratio)
 
 # Function to place orders
-def place_order(contract, action, quantity, stop_loss_price):
+def place_order(contract, action, quantity, stop_loss_price, take_profit_price):
     order = MarketOrder(action, quantity)
     trade = ib.placeOrder(contract, order)
     stop_order = StopOrder('SELL' if action == 'BUY' else 'BUY', quantity, stop_loss_price)
+    take_profit_order = LimitOrder('SELL' if action == 'BUY' else 'BUY', quantity, take_profit_price)
     ib.placeOrder(contract, stop_order)
+    ib.placeOrder(contract, take_profit_order)
     return trade
 
 # Function to log trades
-def log_trade(trade_log, timestamp, contract, action, quantity, price, balance):
-    trade_log.append([timestamp, contract.symbol, action, quantity, price, balance])
-    df = pd.DataFrame(trade_log, columns=['Timestamp', 'Symbol', 'Action', 'Quantity', 'Price', 'Balance'])
+def log_trade(trade_log, timestamp, contract, action, quantity, entry_price, stop_loss_price, take_profit_price, balance):
+    trade_log.append([timestamp, contract.symbol, action, quantity, entry_price, stop_loss_price, take_profit_price, balance])
+    df = pd.DataFrame(trade_log, columns=['Timestamp', 'Symbol', 'Action', 'Quantity', 'Entry Price', 'Stop Loss Price', 'Take Profit Price', 'Balance'])
     df.to_csv('trade_log.csv', index=False)
 
 # Function to get current account balance
@@ -192,31 +192,12 @@ def get_account_balance():
             return float(summary.value)
     return None
 
-# Main function to fetch, update, retrain, and trade
-def main():
-    global trade_log
+def reset_account_balance():
+    initial_balance = 10000
+    print(f"Account balance reset to {initial_balance}")
 
-    # Update data and retrain model
-    for contract in forex_pairs:
-        filename = f'data_{contract.symbol}.csv'
-        if os.path.exists(filename):
-            existing_df = load_data(filename)
-            last_date = existing_df.index[-1]
-            new_df = fetch_missing_data(contract, last_date)
-            if new_df is not None:
-                updated_df = update_data(existing_df, new_df)
-                save_data(updated_df, filename)
-                print(f"Updated data for {contract.symbol}")
-            else:
-                print(f"No new data for {contract.symbol}")
-        else:
-            existing_df = fetch_and_prepare_data(contract)
-            if existing_df is not None:
-                save_data(existing_df, filename)
-                print(f"Saved data for {contract.symbol} to {filename}")
-            else:
-                print(f"Failed to prepare data for {contract.symbol}")
-
+# Function to retrain the model
+def retrain_model():
     combined_data = load_and_prepare_data(forex_pairs)
     if combined_data is not None:
         # Prepare features and labels for the model
@@ -231,16 +212,40 @@ def main():
         model.fit(X_train, y_train)
 
         # Evaluate the model
-        print(f"Hit-Rate: {model.score(X_test, y_test)}")
-        print(confusion_matrix(model.predict(X_test), y_test))
+        y_pred = model.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        print(f"Model Accuracy: {accuracy}")
+        print(confusion_matrix(y_test, y_pred))
 
         # Save the model
         joblib.dump(model, 'ml_model_rf_combined.pkl')
+        return model
     else:
-        print("No data available for training.")
+        print("No data available for retraining.")
+        return None
 
-    # Load model for live trading
-    model = joblib.load('ml_model_rf_combined.pkl')
+# Function to display existing positions
+def show_existing_positions():
+    positions = ib.positions()
+    if positions:
+        print("Existing positions:")
+        for pos in positions:
+            print(f"Symbol: {pos.contract.symbol}, Position: {pos.position}, Avg Cost: {pos.avgCost}")
+    else:
+        print("No existing positions.")
+
+# Main function to fetch, update, retrain, and trade
+def main():
+    global trade_log
+
+    # Show existing positions
+    show_existing_positions()
+
+    # Retrain the model
+    model = retrain_model()
+    if model is None:
+        print("Model retraining failed.")
+        return
 
     # Get current account balance
     current_balance = get_account_balance()
@@ -253,7 +258,10 @@ def main():
     win_prob = 0.6  # Example win probability
     win_loss_ratio = 2.0
     kelly_fraction = kelly_criterion(win_prob, win_loss_ratio)
-    trade_amount = current_balance * risk_fraction * kelly_fraction
+    current_balance = get_account_balance()
+    print(f"Current balance: {current_balance}")
+    trade_amount = (current_balance * risk_fraction) * kelly_fraction
+    print("Trade Amount", trade_amount)
 
     # Live trading
     for contract in forex_pairs:
@@ -265,19 +273,30 @@ def main():
             prediction = model.predict(X_live)[0]
             entry_price = ts['close'].iloc[-1]
 
+            # Calculate stop loss and take profit prices
+            if prediction == 1:  # Buy signal
+                stop_loss_price = entry_price - (entry_price * (1 / win_loss_ratio))
+                take_profit_price = entry_price + (entry_price * win_loss_ratio)
+            elif prediction == -1:  # Sell signal
+                stop_loss_price = entry_price + (entry_price * (1 / win_loss_ratio))
+                take_profit_price = entry_price - (entry_price * win_loss_ratio)
+
+            # Check if there are enough funds to place the trade
+            if current_balance < trade_amount:
+                print(f"Insufficient funds to place trade for {contract.symbol}.")
+                continue
+
             # Place order if no existing positions
             positions = ib.positions()
             if not any(pos.contract.symbol == contract.symbol for pos in positions):
                 if prediction == 1:  # Buy signal
-                    stop_loss_price = entry_price - (entry_price * (1 / win_loss_ratio))
-                    trade = place_order(contract, 'BUY', trade_amount, stop_loss_price)
+                    trade = place_order(contract, 'BUY', trade_amount, stop_loss_price, take_profit_price)
                     current_balance -= trade_amount
-                    log_trade(trade_log, datetime.now(), contract, 'BUY', trade_amount, entry_price, current_balance)
+                    log_trade(trade_log, datetime.now(), contract, 'BUY', trade_amount, entry_price, stop_loss_price, take_profit_price, current_balance)
                 elif prediction == -1:  # Sell signal
-                    stop_loss_price = entry_price + (entry_price * (1 / win_loss_ratio))
-                    trade = place_order(contract, 'SELL', trade_amount, stop_loss_price)
+                    trade = place_order(contract, 'SELL', trade_amount, stop_loss_price, take_profit_price)
                     current_balance += trade_amount
-                    log_trade(trade_log, datetime.now(), contract, 'SELL', trade_amount, entry_price, current_balance)
+                    log_trade(trade_log, datetime.now(), contract, 'SELL', trade_amount, entry_price, stop_loss_price, take_profit_price, current_balance)
 
 # Initialize trade log
 trade_log = []

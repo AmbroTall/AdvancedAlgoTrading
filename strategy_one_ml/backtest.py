@@ -88,7 +88,7 @@ def fetch_missing_data(contract, last_date):
 # Function to fetch and prepare historical data
 def fetch_and_prepare_data(contract):
     end_datetime = ''
-    duration_str = '1 Y'
+    duration_str = '1 M'
     bar_size = '5 mins'
     return fetch_historical_data_with_retry(contract, end_datetime, duration_str, bar_size)
 
@@ -260,10 +260,10 @@ def main():
         plt.ylabel('Balance')
         plt.title('Balance Over Time')
         plt.legend()
-        plt.show()
+        plt.savefig('image.png')
 
         # Save trade log to CSV
-        trade_df.to_csv('trade_log.csv', index=False)
+        trade_df.to_csv('trade_log_backtesting.csv', index=False)
     else:
         print("No data available for backtesting.")
 
